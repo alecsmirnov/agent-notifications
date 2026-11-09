@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/hex"
+	"fmt"
 	"strconv"
 
 	"github.com/777genius/agent-notifications/internal/opencodecodec"
@@ -33,6 +34,7 @@ func runtimeReaderEntry(entry string) (string, bool) {
 // before/after images, and an independent packaged-reader qualification lookup.
 func selectBoundNativeObserver(e opencodehost.VersionEvidence, actual opencodehost.NativeObserverTuple) runtimeObserverGeneration {
 	descriptor, ok := opencodehost.NativeObserverEvidenceForEntry(e.Version, actual.GOOS, actual.GOARCH, actual.ImageSHA256, actual.Entry)
+	diagLog(fmt.Sprintf("select descriptorOk=%v adapter=%v status=%v", ok, descriptor.Tuple.Adapter, descriptor.NativeStatus))
 	if !ok {
 		return observerUnverified
 	}
@@ -42,6 +44,7 @@ func selectBoundNativeObserver(e opencodehost.VersionEvidence, actual opencodeho
 		Required: []opencodehost.Capability{opencodehost.LocalPluginDual, opencodehost.ObserverCompletion,
 			opencodehost.ObserverQuestion, opencodehost.ObserverPermission, opencodehost.ObserverTerminalError},
 	}})
+	diagLog(fmt.Sprintf("select err=%v artifact=%q adapter=%q", err, selected.ArtifactID, selected.Adapter))
 	if err != nil || selected.ArtifactID == "" || selected.Adapter == "" {
 		return observerUnverified
 	}
@@ -57,6 +60,7 @@ func selectBoundNativeObserver(e opencodehost.VersionEvidence, actual opencodeho
 
 func qualifyRuntimeObserver(profile opencodehost.Profile, live runtimeLiveImage) runtimeObserverGeneration {
 	candidate, ok := opencodecodec.LookupCandidate(runtimeImageKey(live))
+	diagLog(fmt.Sprintf("qualify candidateOk=%v candidate=%+v profileVersion=%q key=%+v", ok, candidate, profile.Version, runtimeImageKey(live)))
 	if !ok || profile.Version != candidate.Version || live.NativePID <= 0 {
 		return observerUnverified
 	}
@@ -76,13 +80,17 @@ func qualifyRuntimeObserver(profile opencodehost.Profile, live runtimeLiveImage)
 		return observerUnverified
 	}
 	reader, bound := runtimeReaderTuple(live, candidate.Version)
+	diagLog(fmt.Sprintf("qualify readerBound=%v reader=%+v", bound, reader))
 	if bound {
 		identity := live.SHA256 + ":" + strconv.Itoa(live.NativePID) + ":" + strconv.FormatUint(live.ProcessStartTick, 10) + ":" +
 			strconv.FormatUint(live.Device, 10) + ":" + strconv.FormatUint(live.Inode, 10) + ":" + hex.EncodeToString(live.fingerprint[:])
 		generation := selectBoundNativeObserver(opencodehost.VersionEvidence{Version: profile.Version, Source: "host_runtime", ProbeStatus: "ok", ExecutableIdentity: identity}, reader)
+		diagLog(fmt.Sprintf("qualify generation=%v", generation))
 		if _, clockErr := opencodeevent.SelectTrustedImageClock(runtimeImageKey(live)); clockErr != nil {
+			diagLog(fmt.Sprintf("qualify clockErr=%v", clockErr))
 			return observerUnverified
 		}
+		diagLog(fmt.Sprintf("qualify final generation=%v candidateGen=%v", generation, candidate.Generation))
 		if generation == observerV1 && candidate.Generation == "v1" || generation == observerV2 && candidate.Generation == "v2" {
 			return generation
 		}

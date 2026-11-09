@@ -384,6 +384,7 @@ var init_native_clock_image = __esm({
       ["win32", "x64", "1.3.14", "52f60248a576b34c9a6dcaa27e0a7f08089af35bcdc0dfb10c04d3e00a98314c"],
       ["darwin", "x64", "1.4.2", "4642b7da61279c8aa5d389d9f29454936e449fea6bc510689e9cc976fff6579f"],
       ["darwin", "arm64", "1.4.2", "0b2b68c1efaf20a29aaf636c2ffccc1abb56243a82f48cce45e257d232e03442"],
+      ["darwin", "arm64", "1.4.4", "90e4d03597b03d2051b65b4d793467764e55bacd8e22bf4824479c7233ea0e15"],
       ["win32", "x64", "1.4.2", "ec7a3909bad41ef88e4650f737ab6f0b0c402a7f49a588812d0a79820c2dfc1f"]
     ].map(Object.freeze));
     same2 = (a, b) => ["dev", "ino", "size", "mtimeNs", "ctimeNs"].every((k) => a[k] === b[k]);
@@ -2687,7 +2688,7 @@ async function prepareOwnedHost(directory2, generation, appVersion, diagnostics 
     });
     const response = await registry.profile({ isCurrent: isOwned });
     const receipt = profileReceipt(response.output);
-    if (response.status !== "ok" || receipt.semantic !== "eligible" || receipt.generation !== generation || !isOwned() || generation === "v2" && appVersion !== "2.0.21") throw new TypeError("runtime_unverified");
+    if (response.status !== "ok" || receipt.semantic !== "eligible" || receipt.generation !== generation || !isOwned() || generation === "v2" && appVersion !== "2.2.6") throw new TypeError("runtime_unverified");
     let disposed = false;
     return Object.freeze({
       registry,
@@ -2871,8 +2872,8 @@ var clock_qualification_data_default = Object.freeze([
     "goarch": "arm64",
     "images": [
       {
-        "version": "2.0.21",
-        "imageSHA256": "0b2b68c1efaf20a29aaf636c2ffccc1abb56243a82f48cce45e257d232e03442"
+        "version": "2.2.6",
+        "imageSHA256": "90e4d03597b03d2051b65b4d793467764e55bacd8e22bf4824479c7233ea0e15"
       }
     ],
     "algorithmSourceMerkleSHA256": "36f8663f5cb861f9c49bface19c772d98d87c59e2fe6e0ce1f7fb9eb9ba45f38",
@@ -2963,7 +2964,7 @@ function describeClockPolicy(row) {
   const descriptor = describeClockSource(row.goos, row.goarch);
   const legacy = row.goos === "linux" && row.goarch === "amd64";
   const pins = legacy ? images[row.generation] : void 0;
-  const versions = legacy ? pins?.map((pin) => pin[0]) : row.generation === "v1" ? ["1.18.33"] : row.generation === "v2" ? ["2.0.21"] : void 0;
+  const versions = legacy ? pins?.map((pin) => pin[0]) : Array.isArray(row.images) ? row.images.map((image) => image && image.version) : void 0;
   if (row.protocol !== 1 || !versions || row.sourceKind !== descriptor.sourceKind || row.rawKind !== descriptor.rawKind || !hashOK(row.algorithmSourceMerkleSHA256) || !Array.isArray(row.images) || row.images.length !== versions.length)
     throw new TypeError("qualification_unverified");
   const nativeReadBoundNS = ns(row.nativeReadBoundNS), comparisonBoundNS = ns(row.comparisonBoundNS), translationBoundNS = ns(row.translationBoundNS);
@@ -3913,6 +3914,7 @@ function createRPCCheckpoint(context, ready) {
 
 // plugin.mjs
 var compositionDiagnostic = (enabled, stage) => {
+  try { process.getBuiltinModule("node:fs").appendFileSync("/tmp/an-diag.log", new Date().toISOString() + " composition " + stage + "\n"); } catch {}
   if (!enabled) return;
   try {
     console.error("Agent Notifications OpenCode composition: " + stage);
@@ -4073,7 +4075,7 @@ async function setup(context) {
   if (setups.has(context)) return setups.get(context);
   const starting = (async () => {
     let diagnostics = false;
-    const owned = await prepareOwnedHost(context.location?.directory, "v2", context.app?.version, diagnostics = context.options?.diagnostics === true);
+    const owned = await prepareOwnedHost(context.location?.directory, "v2", context.app?.version, diagnostics = true);
     if (!owned) {
       compositionDiagnostic(diagnostics, "v2.owned.denied");
       return;
@@ -4091,7 +4093,7 @@ async function setup(context) {
       workspaceID: context.location.workspaceID,
       projectID: context.location.project?.id
     });
-    const isNativeOwned = () => owned.isOwned() && context.app?.version === "2.0.21" && context.location?.directory === location2.directory && context.location?.workspaceID === location2.workspaceID && context.location?.project?.id === location2.projectID;
+    const isNativeOwned = () => owned.isOwned() && context.app?.version === "2.2.6" && context.location?.directory === location2.directory && context.location?.workspaceID === location2.workspaceID && context.location?.project?.id === location2.projectID;
     const delivery = createPreparedDelivery({
       registry: owned.registry,
       origin: owned.origin,
@@ -4184,9 +4186,12 @@ async function setup(context) {
           if (!final) compositionDiagnostic(diagnostics, "v2.final.denied");
           return Boolean(final);
         },
-        emit: (event, handoff) => {
+        emit: async (event, handoff) => {
           const fact = view.project(event);
-          return fact ? reportDelivery(delivery.emit(fact, handoff), diagnostics) : void 0;
+          if (!fact) { try { process.getBuiltinModule("node:fs").appendFileSync("/tmp/an-diag.log", new Date().toISOString() + " emit fact-denied\n"); } catch {} return void 0; }
+          const result = await delivery.emit(fact, handoff);
+          try { process.getBuiltinModule("node:fs").appendFileSync("/tmp/an-diag.log", new Date().toISOString() + " emit " + JSON.stringify(result) + "\n"); } catch {}
+          return reportDelivery(Promise.resolve(result), diagnostics);
         }
       });
       observer.start();

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"encoding/json"
 	"io"
 	"os"
@@ -17,6 +18,15 @@ import (
 	"github.com/777genius/plugin-kit-ai/install/integrationctl/agentplugins/adapters/clientdetect"
 	"github.com/777genius/plugin-kit-ai/install/integrationctl/opencodehost"
 )
+
+func diagLog(msg string) {
+	f, e := os.OpenFile("/tmp/an-go.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	if e != nil {
+		return
+	}
+	_, _ = f.WriteString(time.Now().UTC().Format(time.RFC3339Nano) + " " + msg + "\n")
+	_ = f.Close()
+}
 
 type runtimeProfileInput struct {
 	Protocol       int    `json:"protocol"`
@@ -104,8 +114,10 @@ func runtimeProfileOperation(ctx context.Context, args []string, input io.ReadCl
 		valid = err == nil && json.Unmarshal(raw, &in) == nil && in == owned && in.Protocol == 1 && in.NativePID > 0 && runtimeEntryRequest(in.Entry) &&
 			validPrivateOrigin(in.Origin) && canonicalPrivatePath(in.ControlRoot) && canonicalPrivatePath(in.HostExecutable) && in.PublicExecPath == in.HostExecutable
 	}
+	diagLog(fmt.Sprintf("valid=%v err=%v in=%+v", valid, err, in))
 	if valid && ctx.Err() == nil {
 		held, liveErr := holdRuntimeLiveImage(ctx, in)
+		diagLog(fmt.Sprintf("holdErr=%v", liveErr))
 		if liveErr == nil {
 			defer held.Close()
 			before := held.image
@@ -114,6 +126,7 @@ func runtimeProfileOperation(ctx context.Context, args []string, input io.ReadCl
 			evidence, probeErr := clientdetect.ProbeIsolatedOpenCodeTarget(ctx, clientdetect.ProbeTarget{Executable: in.HostExecutable, Environment: []string{"PATH="}, Timeout: 30 * time.Second})
 			profile := opencodehost.Resolve(evidence.VersionEvidence)
 			after, afterErr := held.Revalidate(ctx)
+			diagLog(fmt.Sprintf("probeErr=%v status=%q version=%q family=%q live=%+v afterErr=%v same=%v", probeErr, evidence.ProbeStatus, profile.Version, profile.Family, before, afterErr, before == after))
 			if probeErr == nil && evidence.ProbeStatus == "ok" && afterErr == nil && before == after && ctx.Err() == nil && qualify != nil {
 				generation := qualify(profile.Clone(), before)
 				if generation == observerV1 && profile.Family == opencodehost.ModernV1 || generation == observerV2 && profile.Family == opencodehost.V2 {

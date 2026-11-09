@@ -78,3 +78,5 @@ require (
 	golang.org/x/time v0.15.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/777genius/plugin-kit-ai/install/integrationctl => ./third_party/integrationctl
