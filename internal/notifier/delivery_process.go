@@ -74,7 +74,7 @@ func nativeProbeCommand(ctx context.Context, executable string) *exec.Cmd {
 	return cmd
 }
 func nativeLaunchCommand(ctx context.Context, bundle, request, receipt string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "/usr/bin/open", "-n", "-a", bundle, "--args", "--send-json", "--request-file", request, "--receipt-file", receipt, "-launchedViaLaunchServices")
+	cmd := exec.CommandContext(ctx, "/usr/bin/open", "-n", "-g", "-j", "-a", bundle, "--args", "--send-json", "--request-file", request, "--receipt-file", receipt, "-launchedViaLaunchServices")
 	cmd.Env = nativeNotificationEnvironment()
 	cmd.Dir = "/"
 	cmd.WaitDelay = 100 * time.Millisecond
