@@ -2,7 +2,7 @@ name: Build macOS arm64
 
 on:
   push:
-    branches: [opencode-2.2.6-macos]
+    branches: [opencode-2.2.6-macos, opencode-2.2.6-macos-public]
   workflow_dispatch:
 
 jobs:
