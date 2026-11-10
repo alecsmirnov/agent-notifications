@@ -3914,7 +3914,6 @@ function createRPCCheckpoint(context, ready) {
 
 // plugin.mjs
 var compositionDiagnostic = (enabled, stage) => {
-  try { process.getBuiltinModule("node:fs").appendFileSync("/tmp/an-diag.log", new Date().toISOString() + " composition " + stage + "\n"); } catch {}
   if (!enabled) return;
   try {
     console.error("Agent Notifications OpenCode composition: " + stage);
@@ -4075,7 +4074,7 @@ async function setup(context) {
   if (setups.has(context)) return setups.get(context);
   const starting = (async () => {
     let diagnostics = false;
-    const owned = await prepareOwnedHost(context.location?.directory, "v2", context.app?.version, diagnostics = true);
+    const owned = await prepareOwnedHost(context.location?.directory, "v2", context.app?.version, diagnostics = context.options?.diagnostics === true);
     if (!owned) {
       compositionDiagnostic(diagnostics, "v2.owned.denied");
       return;
@@ -4186,12 +4185,9 @@ async function setup(context) {
           if (!final) compositionDiagnostic(diagnostics, "v2.final.denied");
           return Boolean(final);
         },
-        emit: async (event, handoff) => {
+        emit: (event, handoff) => {
           const fact = view.project(event);
-          if (!fact) { try { process.getBuiltinModule("node:fs").appendFileSync("/tmp/an-diag.log", new Date().toISOString() + " emit fact-denied\n"); } catch {} return void 0; }
-          const result = await delivery.emit(fact, handoff);
-          try { process.getBuiltinModule("node:fs").appendFileSync("/tmp/an-diag.log", new Date().toISOString() + " emit " + JSON.stringify(result) + "\n"); } catch {}
-          return reportDelivery(Promise.resolve(result), diagnostics);
+          return fact ? reportDelivery(delivery.emit(fact, handoff), diagnostics) : void 0;
         }
       });
       observer.start();
